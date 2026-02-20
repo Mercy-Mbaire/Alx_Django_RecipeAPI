@@ -1,4 +1,4 @@
-from rest_framework import status, generics, permissions
+from rest_framework import status, generics, permissions, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
 from .serializers import UserSerializer, RecipeSerializer
 from django.contrib.auth.models import User
 from .models import Recipe
+from .permissions import IsAuthorOrReadOnly
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -21,12 +22,11 @@ def register(request):
         }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-class RecipeList(generics.ListCreateAPIView):
+class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     serializer_class = RecipeSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
 
-class RecipeDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Recipe.objects.all()
-    serializer_class = RecipeSerializer
-    permission_classes = [IsAuthenticatedOrReadOnly]
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+

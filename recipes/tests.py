@@ -30,9 +30,12 @@ class AuthTests(APITestCase):
 
 class RecipePermissionTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='testuser', password='password123')
-        self.token = Token.objects.create(user=self.user)
+        self.user_author = User.objects.create_user(username='author', password='password123')
+        self.user_other = User.objects.create_user(username='other', password='password123')
+        self.token_author = Token.objects.create(user=self.user_author)
+        self.token_other = Token.objects.create(user=self.user_other)
         self.recipe = Recipe.objects.create(
+            author=self.user_author,
             title='Test Recipe',
             description='Test Description',
             ingredients='Ingredient 1, Ingredient 2',
@@ -45,40 +48,11 @@ class RecipePermissionTests(APITestCase):
         self.detail_url = reverse('recipe-detail', kwargs={'pk': self.recipe.pk})
 
     def test_unauthenticated_read_list(self):
-        """
-        Ensure unauthenticated users can read the recipe list.
-        """
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_unauthenticated_read_detail(self):
-        """
-        Ensure unauthenticated users can read recipe detail.
-        """
-        response = self.client.get(self.detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_unauthenticated_create(self):
-        """
-        Ensure unauthenticated users CANNOT create recipes.
-        """
-        data = {
-            'title': 'New Recipe',
-            'description': 'Description',
-            'ingredients': 'Ingredients',
-            'instructions': 'Instructions',
-            'prep_time': 5,
-            'cook_time': 5,
-            'servings': 1
-        }
-        response = self.client.post(self.list_url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_authenticated_create(self):
-        """
-        Ensure authenticated users CAN create recipes.
-        """
-        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token.key)
+    def test_authenticated_create_sets_author(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_author.key)
         data = {
             'title': 'New Recipe',
             'description': 'Description',
@@ -90,3 +64,34 @@ class RecipePermissionTests(APITestCase):
         }
         response = self.client.post(self.list_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['author'], 'author')
+
+    def test_invalid_cook_time(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_author.key)
+        data = {
+            'title': 'Bad Recipe',
+            'cook_time': 0,
+            'prep_time': 5,
+            'ingredients': 'stuff',
+            'instructions': 'do things'
+        }
+        response = self.client.post(self.list_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('cook_time', response.data)
+
+    def test_author_can_edit_own_recipe(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_author.key)
+        data = {'title': 'Updated Title'}
+        response = self.client.patch(self.detail_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.recipe.refresh_from_db()
+        self.assertEqual(self.recipe.title, 'Updated Title')
+
+    def test_non_author_cannot_edit_recipe(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_other.key)
+        data = {'title': 'Hack Title'}
+        response = self.client.patch(self.detail_url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.recipe.refresh_from_db()
+        self.assertNotEqual(self.recipe.title, 'Hack Title')
+

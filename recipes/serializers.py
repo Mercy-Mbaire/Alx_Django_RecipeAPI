@@ -18,6 +18,14 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 class RecipeSerializer(serializers.ModelSerializer):
+    author = serializers.ReadOnlyField(source='author.username')
+
     class Meta:
         model = Recipe
-        fields = '__all__'
+        fields = ['id', 'author', 'title', 'description', 'ingredients', 'instructions', 'prep_time', 'cook_time', 'servings', 'created_at', 'updated_at']
+
+    def validate_cook_time(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Cooking time must be greater than 0.")
+        return value
+
