@@ -19,7 +19,6 @@ class RecipeAPITests(APITestCase):
             category=self.category,
             title='Test Recipe',
             description='Test Description',
-            ingredients='Ingredient 1, Ingredient 2',
             instructions='Step 1, Step 2',
             prep_time=10,
             cook_time=20,
@@ -53,7 +52,7 @@ class RecipeAPITests(APITestCase):
             'cook_time': 5,
             'servings': 1,
             'category': self.category.id,
-            'ingredients_list': [
+            'ingredients': [
                 {'name': 'Water', 'quantity': '1 liter'},
                 {'name': 'Salt', 'quantity': '1 pinch'}
             ]
@@ -61,19 +60,19 @@ class RecipeAPITests(APITestCase):
         response = self.client.post(self.list_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['author'], 'author')
-        self.assertEqual(len(response.data['ingredients_list']), 2)
+        self.assertEqual(len(response.data['ingredients']), 2)
 
     def test_author_can_update_ingredients(self):
         self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_author.key)
         data = {
-            'ingredients_list': [
+            'ingredients': [
                 {'name': 'New Ingredient', 'quantity': '100g'}
             ]
         }
         response = self.client.patch(self.detail_url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data['ingredients_list']), 1)
-        self.assertEqual(response.data['ingredients_list'][0]['name'], 'New Ingredient')
+        self.assertEqual(len(response.data['ingredients']), 1)
+        self.assertEqual(response.data['ingredients'][0]['name'], 'New Ingredient')
 
     def test_is_author_or_read_only(self):
         # Non-author tries to update
@@ -87,3 +86,45 @@ class RecipeAPITests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
+
+    def test_filtering(self):
+        # Filter by category
+        response = self.client.get(self.list_url, {'category': self.category.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # DRF might return paginated results or a simple list. Assuming simple list based on current settings.
+        self.assertEqual(len(response.data), 1)
+
+        # Filter by cook_time
+        response = self.client.get(self.list_url, {'cook_time': 20})
+        self.assertEqual(len(response.data), 1)
+
+    def test_search(self):
+        # Search by title
+        response = self.client.get(self.list_url, {'search': 'Test'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        # Search by description
+        response = self.client.get(self.list_url, {'search': 'Description'})
+        self.assertEqual(len(response.data), 1)
+
+    def test_favorites(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token_other.key)
+        
+        # Add to favorites
+        favorite_url = reverse('recipe-favorite', kwargs={'pk': self.recipe.pk})
+        response = self.client.post(favorite_url)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Check if favorited (is_favorite field in recipe detail)
+        response = self.client.get(self.detail_url)
+        self.assertTrue(response.data['is_favorite'])
+
+        # Unfavorite
+        unfavorite_url = reverse('recipe-unfavorite', kwargs={'pk': self.recipe.pk})
+        response = self.client.delete(unfavorite_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        # Check if unfavorited
+        response = self.client.get(self.detail_url)
+        self.assertFalse(response.data['is_favorite'])

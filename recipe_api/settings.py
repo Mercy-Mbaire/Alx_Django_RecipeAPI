@@ -25,7 +25,8 @@ SECRET_KEY = 'django-insecure-j9^j%0%j)vperj3tr6bxbgr!^rmkm6fyi9c2qrs+(m3(ti#fp7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+
 
 
 # Application definition
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'recipes',
     'rest_framework',
     'rest_framework.authtoken',
+    'django_filters',
 ]
 
 REST_FRAMEWORK = {
@@ -48,6 +50,10 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
+    ],
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
     ]
 }
 
